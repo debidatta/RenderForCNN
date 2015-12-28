@@ -10,11 +10,11 @@ import datetime
 from functools import partial
 from multiprocessing.dummy import Pool
 from subprocess import call
+import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(BASE_DIR))
 from global_variables import *
-
 
 '''
 @input: 
@@ -27,8 +27,12 @@ from global_variables import *
 def load_one_category_shape_list(shape_synset):
     # return a list of (synset, md5, numofviews) tuples
     shape_md5_list = os.listdir(os.path.join(g_shapenet_root_folder,shape_synset))
-    view_num = g_syn_images_num_per_category / len(shape_md5_list)
-    shape_list = [(shape_synset, shape_md5, os.path.join(g_shapenet_root_folder, shape_synset, shape_md5, 'model.obj'), view_num) for shape_md5 in shape_md5_list]
+    n_models = len(shape_md5_list)
+    view_nums = np.bincount(np.random.choice(n_models, g_syn_images_num_per_category), minlength=n_models) 
+    shape_list = []
+    for i, view_num in enumerate(view_nums):
+        if view_num != 0:
+	    shape_list.append((shape_synset, shape_md5_list[i], os.path.join(g_shapenet_root_folder, shape_synset, shape_md5_list[i], 'model.obj'), view_num))
     return shape_list
 
 '''
