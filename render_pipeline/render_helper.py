@@ -45,11 +45,18 @@ def load_one_category_shape_list(shape_synset):
 def load_one_category_shape_views(synset):
     # return shape_synset_view_params
     if not os.path.exists(g_view_distribution_files[synset]):
-        print('Failed to read view distribution files from %s for synset %s' % 
+        print('Failed to read view distribution files from %s for synset %s. Will use uniform random distribution for view parameters' % 
               (g_view_distribution_files[synset], synset))
-        exit()
-    view_params = open(g_view_distribution_files[synset]).readlines()
-    view_params = [[float(x) for x in line.strip().split(' ')] for line in view_params] 
+	if g_model_view_params_proxy_use:
+	    idx = g_shape_names.index(g_model_view_params_proxy_category)
+	    proxy_synset = g_shape_synsets[idx]
+	    view_params = open(g_view_distribution_files[proxy_synset]).readlines()
+	    view_params = [[float(x) for x in line.strip().split(' ')] for line in view_params]
+	else:
+	    view_params = []
+    else:
+        view_params = open(g_view_distribution_files[synset]).readlines()
+        view_params = [[float(x) for x in line.strip().split(' ')] for line in view_params] 
     return view_params
 
 '''
@@ -68,10 +75,17 @@ def render_one_category_model_views(shape_list, view_params):
     for shape_synset, shape_md5, shape_file, view_num in shape_list:
         # write tmp view file
         tmp = tempfile.NamedTemporaryFile(dir=tmp_dirname, delete=False)
-        for i in range(view_num): 
-            paramId = random.randint(0, len(view_params)-1)
-            tmp_string = '%f %f %f %f\n' % (view_params[paramId][0], view_params[paramId][1], view_params[paramId][2], max(0.01,view_params[paramId][3]))
-            tmp.write(tmp_string)
+        for i in range(view_num):
+	    if len(view_params) != 0:
+                paramId = random.randint(0, len(view_params)-1)
+                tmp_string = '%f %f %f %f\n' % (view_params[paramId][0], view_params[paramId][1], view_params[paramId][2], max(0.01,view_params[paramId][3]))
+            else:
+	        azimuth = random.uniform(g_model_azimuth_degree_lowbound, g_model_azimuth_degree_highbound)
+		elevation = random.uniform(g_model_elevation_degree_lowbound, g_model_elevation_degree_highbound)
+		tilt = random.uniform(g_model_tilt_degree_lowbound, g_model_tilt_degree_highbound)
+		distance = random.uniform(g_model_dist_lowbound, g_model_dist_highbound)
+		tmp_string = '%f %f %f %f\n' % (azimuth, elevation, tilt, max(0.01,distance))
+	    tmp.write(tmp_string)
         tmp.close()
 
         command = '%s %s --background --python %s -- %s %s %s %s %s > /dev/null 2>&1' % (g_blender_executable_path, g_blank_blend_file_path, os.path.join(BASE_DIR, 'render_model_views.py'), shape_file, shape_synset, shape_md5, tmp.name, os.path.join(g_syn_images_folder, shape_synset, shape_md5))
@@ -90,6 +104,4 @@ def render_one_category_model_views(shape_list, view_params):
         if return_code != 0:
             print('Rendering command %d of %d (\"%s\") failed' % (idx, len(shape_list), commands[idx]))
     shutil.rmtree(tmp_dirname) 
-
-
 
