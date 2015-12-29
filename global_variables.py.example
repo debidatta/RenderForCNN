@@ -54,6 +54,7 @@ g_syn_rendering_thread_num = 20
 g_hostname_synset_idx_map = {socket.gethostname(): range(12)}
 
 # Crop and overlay is IO-heavy, running on local FS is much faster
+g_crop_proxy_category = 'bottle'
 g_crop_hostname_synset_idx_map = {socket.gethostname(): range(12)}
 g_overlay_hostname_synset_idx_map = {socket.gethostname(): range(12)}
 
@@ -65,6 +66,18 @@ g_view_distribution_files = dict(zip(g_shape_synsets, [os.path.join(g_view_distr
 g_truncation_statistics_folder = os.path.join(g_data_folder, 'truncation_statistics')
 g_truncation_distribution_folder = os.path.join(g_data_folder, 'truncation_distribution')
 g_truncation_distribution_files = dict(zip(g_shape_synsets, [os.path.join(g_truncation_distribution_folder, name+'.txt') for name in g_shape_names]))
+
+# view parameters for categories without view distribution files
+g_model_view_params_proxy_use = True # if this is false, uniform sampling will be done with following parameters
+g_model_view_params_proxy_category = 'bottle'
+g_model_azimuth_degree_lowbound = 0
+g_model_azimuth_degree_highbound = 360
+g_model_elevation_degree_lowbound = -90
+g_model_elevation_degree_highbound = 90
+g_model_tilt_degree_lowbound = -90
+g_model_tilt_degree_highbound = 90
+g_model_dist_lowbound = 0
+g_model_dist_highbound = 10
 
 # render_model_views
 g_syn_light_num_lowbound = 0
