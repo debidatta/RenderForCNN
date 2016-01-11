@@ -37,7 +37,7 @@ def path2label(path):
 @output:
     save "<image_filepath> <class_idx> <azimuth> <elevation> <tilt>" to files.
 '''
-def get_one_category_image_label_file(shape_synset, train_image_label_file, test_image_label_file, train_ratio = 0.9):
+def get_one_category_image_label_file(shape_synset, train_image_label_file, test_image_label_file, train_ratio = 0.9, ignore_angle=False):
     class_idx = g_shape_synsets.index(shape_synset) 
 
     image_folder = os.path.join(g_syn_images_bkg_overlaid_folder, shape_synset)
@@ -60,7 +60,10 @@ def get_one_category_image_label_file(shape_synset, train_image_label_file, test
         fout = open(image_label_file, 'w')
         for filename_label in image_filename_label_pairs:
             label = filename_label[1]
-            fout.write('%s %d %d %d %d\n' % (filename_label[0], class_idx, label[0], label[1], label[2]));
+	    if ignore_angle:
+                fout.write('%s %d\n' % (filename_label[0], class_idx))
+            else:
+                fout.write('%s %d %d %d %d\n' % (filename_label[0], class_idx, label[0], label[1], label[2]))
         fout.close()
 
 
@@ -104,14 +107,18 @@ def view2label(degree, class_index):
     write TWO LMDB corresponding to images and labels, 
     i.e. xxx/xxxx_lmdb_label (each item is class_idx, azimuth, elevation, tilt) and xxx/xxxx_lmdb_image
 '''
-def generate_image_view_lmdb(image_label_file, output_lmdb):
+def generate_image_view_lmdb(image_label_file, output_lmdb, ignore_angle=False):
     lines = [line.rstrip() for line in open(image_label_file,'r')]
 
     tmp_label_fout = tempfile.NamedTemporaryFile(dir=g_syn_images_lmdb_folder, delete=False)
     for line in lines:
         ll = line.split(' ')
-        class_idx, azimuth, elevation, tilt = [int(x) for x in ll[1:]]
-        tmp_label_fout.write('%d %d %d %d\n' % (class_idx, view2label(azimuth, class_idx), view2label(elevation, class_idx), view2label(tilt, class_idx)))
+	if ignore_angle:
+	    class_idx = int(ll[1])
+	    tmp_label_fout.write('%d\n' % (class_idx))
+        else:
+	    class_idx, azimuth, elevation, tilt = [int(x) for x in ll[1:]]
+	    tmp_label_fout.write('%d %d %d %d\n' % (class_idx, view2label(azimuth, class_idx), view2label(elevation, class_idx), view2label(tilt, class_idx)))
     tmp_label_fout.close()
     print("Tmp label file generated: %s" % tmp_label_fout.name)
     
