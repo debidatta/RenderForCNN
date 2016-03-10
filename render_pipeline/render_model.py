@@ -168,24 +168,16 @@ for param in view_params:
         bpy.data.objects['Camera']
         verts = [vert.co for vert in obj.data.vertices]
         coords_2d = [world_to_camera_view(scene, camObj, coord) for coord in verts]
-        #camframe = view3d_camera_border(scene)
-        #region, rv3d = view3d_find()
-        #print([xy for xy in camframe])
-        #for i, v in enumerate(verts):
-        #    xy = world_to_camera_view(scene, camObj, v)
-        #    print ((camframe[2].x <= xy[0] <= camframe[0].x) 
-        #            and (camframe[1].y <= xy[1] <= camframe[0].y))
-        #    print(v)
-        
         
         vertlist = [vert.co for vert in obj.data.vertices] 
         # neat eye location code with the help of paleajed
         bpy.context.scene.camera = bpy.data.objects['Camera']
         #bpy.ops.view3d.camera_to_view()
         
-        r, rv3d = view3d_find()#bpy.context.space_data.region_3d  
-        eye = Vector(rv3d.view_matrix[2][:3])
-        eye_location = rv3d.view_location + eye  
+        #r, rv3d = view3d_find()#bpy.context.space_data.region_3d  
+        #eye = Vector(rv3d.view_matrix[2][:3])
+        eye_location = camObj.location 
+        visible_vertices = set()
         for idx, polygon in enumerate(obj.data.polygons):
             vert_index = polygon.vertices[0]
             pnormal = obj.matrix_world * polygon.normal
@@ -196,25 +188,30 @@ for param in view_params:
 
             if dot_value < 0.0:
                 print("False")
-                polygon.select = False
+                #polygon.select = False
             else:
                 print("True")
-                polygon.select = True
+                #polygon.select = True
+                for vert in polygon.vertices:
+                    visible_vertices.add(vert_index)   
         
         # 2d data printout:
         rnd = lambda i: round(i)
+        coords_2d = [coords_2d[index] for index in list(visible_vertices)]
+        print(len(coords_2d))
         for x, y, distance_to_lens in coords_2d:
             key_px = "{},{}".format(rnd(res_x*x), rnd(res_y*y))
-            if key_px in px_dict.keys():
-                px_dict[key_px] = min(px_dict[key_px], distance_to_lens)
-            else:
-                px_dict[key_px] = distance_to_lens
-        for x, y, distance_to_lens in coords_2d:
-            key_px = "{},{}".format(rnd(res_x*x), rnd(res_y*y))
-            if px_dict[key_px] == distance_to_lens:
-                print("{},{}".format(rnd(res_x*x), rnd(res_y*y)))
-            else:
-                print("Point not visible")
+            print("{},{}".format(rnd(res_x*x), rnd(res_y*y)))
+            #if key_px in px_dict.keys():
+            #    px_dict[key_px] = min(px_dict[key_px], distance_to_lens)
+            #else:
+            #    px_dict[key_px] = distance_to_lens
+        #for x, y, distance_to_lens in coords_2d:
+        #    key_px = "{},{}".format(rnd(res_x*x), rnd(res_y*y))
+        #    if px_dict[key_px] == distance_to_lens:
+        #        print("{},{}".format(rnd(res_x*x), rnd(res_y*y)))
+        #    else:
+        #        print("Point not visible")
 
     syn_image_file = './%s_%s_a%03d_e%03d_t%03d_d%03d.png' % (shape_synset, shape_md5, round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
     bpy.data.scenes['Scene'].render.filepath = os.path.join(syn_images_folder, syn_image_file)
