@@ -26,6 +26,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 import bmesh
 from mathutils import Vector
+from mathutils.geometry import intersect_ray_tri
 
 # Load rendering light parameters
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,36 +38,6 @@ light_num_lowbound = g_syn_light_num_lowbound
 light_num_highbound = g_syn_light_num_highbound
 light_dist_lowbound = g_syn_light_dist_lowbound
 light_dist_highbound = g_syn_light_dist_highbound
-
-def view3d_find():
-    # returns first 3d view, normally we get from context
-    for area in bpy.context.window.screen.areas:
-        if area.type == 'VIEW_3D':
-            v3d = area.spaces[0]
-            rv3d = v3d.region_3d
-            for region in area.regions:
-                if region.type == 'WINDOW':
-                    return region, rv3d
-    return None, None
-
-def view3d_camera_border(scene):
-    #obj = scene.camera
-    #cam = obj.data
-    cam = bpy.data.objects['Camera']
-    bpy.context.scene.camera = cam
-    obj = bpy.context.scene.camera
-    cam = obj.data
-    frame = cam.view_frame(scene)
-
-    # move into object space
-    frame = [obj.matrix_world * v for v in frame]
-
-    # move into pixelspace
-    from bpy_extras.view3d_utils import location_3d_to_region_2d
-    region, rv3d = view3d_find()
-    frame_px = [location_3d_to_region_2d(region, rv3d, v) for v in frame]
-    print(frame_px)
-    return frame_px
 
 # Input parameters
 #'%s %s --background --python %s -- %s %s %s %s %s %s' % (g_blender_executable_path, blank_file, render_code, args.model_file, 'xxx', 'xxx', view_file, temp_dirname, args.scale)
@@ -114,7 +85,16 @@ camObj = bpy.data.objects['Camera']
 # camObj.data.lens_unit = 'FOV'
 # camObj.data.angle = 0.2
 
-# Remove ugly hack
+# Recipe to merge meshes as CAD models may have more than one mesh 
+for ob in bpy.context.scene.objects:
+    if ob.type == 'MESH':
+        ob.select = True
+        bpy.context.scene.objects.active = ob
+    else:
+        ob.select = False
+bpy.ops.object.join()
+
+# Find mesh name
 mesh_name = [x.name for x in bpy.data.objects if x.name not in ['Camera','Lamp']][0]
 
 # set lights
@@ -165,53 +145,43 @@ for param in view_params:
     
     # use generator expressions () or list comprehensions []
     for obj in [bpy.data.objects[mesh_name]]:
-        bpy.data.objects['Camera']
         verts = [vert.co for vert in obj.data.vertices]
         coords_2d = [world_to_camera_view(scene, camObj, coord) for coord in verts]
         
         vertlist = [vert.co for vert in obj.data.vertices] 
-        # neat eye location code with the help of paleajed
         bpy.context.scene.camera = bpy.data.objects['Camera']
-        #bpy.ops.view3d.camera_to_view()
-        
-        #r, rv3d = view3d_find()#bpy.context.space_data.region_3d  
-        #eye = Vector(rv3d.view_matrix[2][:3])
         eye_location = camObj.location 
-        visible_vertices = set()
-        for idx, polygon in enumerate(obj.data.polygons):
-            vert_index = polygon.vertices[0]
-            pnormal = obj.matrix_world * polygon.normal
-            world_coordinate = obj.matrix_world * vertlist[vert_index]
-        
-            result_vector = eye_location-world_coordinate
-            dot_value = pnormal.dot(result_vector.normalized())            
-
-            if dot_value < 0.0:
-                print("False")
-                #polygon.select = False
-            else:
-                print("True")
-                #polygon.select = True
-                for vert in polygon.vertices:
-                    visible_vertices.add(vert_index)   
-        
+        visible_vertices = []
+        #print(len(verts))
+        # Find visible points in current camera
+        for i, vert in enumerate(verts):
+            vis = True
+            for idx, polygon in enumerate(obj.data.polygons):
+                vert_indices = [p for p in polygon.vertices]
+                if i in vert_indices:
+                    continue
+                v1 = Vector(vertlist[vert_indices[0]])
+                v2 = Vector(vertlist[vert_indices[1]])
+                v3 = Vector(vertlist[vert_indices[2]])
+                ray = Vector(eye_location-vert)
+                orig = Vector(vert)
+                
+                int_pt = intersect_ray_tri(v1, v2, v3, ray, orig)
+                if int_pt != None:
+                    vis = False
+                    break
+            
+            if vis:
+                visible_vertices.append(i)   
         # 2d data printout:
         rnd = lambda i: round(i)
-        coords_2d = [coords_2d[index] for index in list(visible_vertices)]
+        coords_2d = [coords_2d[index] for index in visible_vertices]
         print(len(coords_2d))
+        for index in visible_vertices:
+            print("{},{},{}".format(verts[index][0],verts[index][1], verts[index][2]))
         for x, y, distance_to_lens in coords_2d:
             key_px = "{},{}".format(rnd(res_x*x), rnd(res_y*y))
             print("{},{}".format(rnd(res_x*x), rnd(res_y*y)))
-            #if key_px in px_dict.keys():
-            #    px_dict[key_px] = min(px_dict[key_px], distance_to_lens)
-            #else:
-            #    px_dict[key_px] = distance_to_lens
-        #for x, y, distance_to_lens in coords_2d:
-        #    key_px = "{},{}".format(rnd(res_x*x), rnd(res_y*y))
-        #    if px_dict[key_px] == distance_to_lens:
-        #        print("{},{}".format(rnd(res_x*x), rnd(res_y*y)))
-        #    else:
-        #        print("Point not visible")
 
     syn_image_file = './%s_%s_a%03d_e%03d_t%03d_d%03d.png' % (shape_synset, shape_md5, round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
     bpy.data.scenes['Scene'].render.filepath = os.path.join(syn_images_folder, syn_image_file)
