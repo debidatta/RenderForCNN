@@ -175,7 +175,7 @@ for param in view_params:
         for polygon in obj.data.polygons:
             vert_index = [p for p in polygon.vertices]
             vert_indices.append(vert_index)
-        #random.shuffle(vert_indices)
+        random.shuffle(vert_indices)
         for i, vert in enumerate(verts):
             vis = True
             for vert_index in vert_indices:
