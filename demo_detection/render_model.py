@@ -16,7 +16,8 @@ parser.add_argument('-a', '--azimuth', default='45')
 parser.add_argument('-e', '--elevation', default='20')
 parser.add_argument('-t', '--tilt', default='0')
 parser.add_argument('-d', '--distance', default='2.0')
-parser.add_argument('-o', '--output_img', help='Output img filename.', default=osp.join(BASE_DIR, 'demo_img.png')) 
+parser.add_argument('-o', '--output_img', help='Output img filename.', default=osp.join(BASE_DIR, 'demo_img.png'))
+parser.add_argument('-l', '--output_label', help='Output label filename.', default=osp.join(BASE_DIR, 'demo_label.txt'))
 parser.add_argument('-s', '--scale', help='Scale factor if model not in metres.', default=0.001)
 args = parser.parse_args()
 
@@ -35,7 +36,9 @@ try:
     print render_cmd
     os.system(render_cmd)
     imgs = glob.glob(temp_dirname+'/*.png')
+    labels = glob.glob(temp_dirname+'/*.label')
     shutil.move(imgs[0], args.output_img)
+    shutil.move(labels[0], args.output_label)
 except:
     print('render failed. render_cmd: %s' % (render_cmd))
 
