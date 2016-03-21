@@ -3,7 +3,7 @@
 '''
 RENDER_MODEL_VIEWS.py
 brief:
-	render projections of a 3D model from viewpoints specified by an input parameter file
+    render projections of a 3D model from viewpoints specified by an input parameter file
 usage:
 	blender blank.blend --background --python render_model_views.py -- <shape_obj_filename> <shape_category_synset> <shape_model_md5> <shape_view_param_file> <syn_img_output_folder>
 
@@ -25,8 +25,10 @@ import numpy as np
 import bpy
 from bpy_extras.object_utils import world_to_camera_view
 import bmesh
-from mathutils import Vector
+from mathutils import Vector, Matrix
 from mathutils.geometry import intersect_ray_tri
+import math
+from collections import OrderedDict
 
 # Load rendering light parameters
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +40,17 @@ light_num_lowbound = g_syn_light_num_lowbound
 light_num_highbound = g_syn_light_num_highbound
 light_dist_lowbound = g_syn_light_dist_lowbound
 light_dist_highbound = g_syn_light_dist_highbound
+
+render_scale = bpy.scene.render.resolution_percentage / 100
+render_size = (
+            int(bpy.scene.render.resolution_x * render_scale),
+            int(bpy.scene.render.resolution_y * render_scale),
+            )
+
+def project_by_object_utils(cam, point):
+    scene = bpy.context.scene
+    co_2d = world_to_camera_view(scene, cam, point)
+    return Vector((co_2d.x * render_size[0], render_size[1] - co_2d.y * render_size[1]))
 
 # Input parameters
 #'%s %s --background --python %s -- %s %s %s %s %s %s' % (g_blender_executable_path, blank_file, render_code, args.model_file, 'xxx', 'xxx', view_file, temp_dirname, args.scale)
@@ -69,9 +82,6 @@ scene = bpy.context.scene
 #print(obj.vertices[0].co)
 # needed to rescale 2d coordinates
 render = scene.render
-res_x = render.resolution_x
-res_y = render.resolution_y
-
 
 bpy.context.scene.render.alpha_mode = 'TRANSPARENT'
 #bpy.context.scene.render.use_shadows = False
@@ -86,16 +96,29 @@ camObj = bpy.data.objects['Camera']
 # camObj.data.angle = 0.2
 
 # Recipe to merge meshes as CAD models may have more than one mesh 
+objs = []
 for ob in bpy.context.scene.objects:
+    ob.select = False
     if ob.type == 'MESH':
-        ob.select = True
-        bpy.context.scene.objects.active = ob
-    else:
-        ob.select = False
+        objs.append(ob)
+objs = sorted(objs, key=lambda ob: ob.name)
+for ob in objs:
+    ob.select = True
+    bpy.context.scene.objects.active = ob
+    
 bpy.ops.object.join()
 
 # Find mesh name
 mesh_name = [x.name for x in bpy.data.objects if x.name not in ['Camera','Lamp']][0]
+
+# Push all vertices in a dict
+vert_visibility_dict = {}
+obj = bpy.data.objects[mesh_name]
+verts = [obj.matrix_world*vert.co for vert in obj.data.vertices]
+for vert in verts:
+    vert_str = "{:.40f},{:.40f},{:.40f}".format(vert[0],vert[1], vert[2]) 
+    vert_visibility_dict[vert_str] = (False, None)
+vert_visibility_dict = OrderedDict(sorted(vert_visibility_dict.items(), key=lambda x: x[0]))
 
 # set lights
 bpy.ops.object.select_all(action='TOGGLE')
@@ -103,7 +126,6 @@ if 'Lamp' in list(bpy.data.objects.keys()):
     bpy.data.objects['Lamp'].select = True # remove default light
 bpy.ops.object.delete()
 
-px_dict = {}
 # YOUR CODE START HERE
 
 for param in view_params:
@@ -142,27 +164,25 @@ for param in view_params:
     camObj.rotation_quaternion[1] = q[1]
     camObj.rotation_quaternion[2] = q[2]
     camObj.rotation_quaternion[3] = q[3]
+    bpy.context.scene.update()
     
     # use generator expressions () or list comprehensions []
     for obj in [bpy.data.objects[mesh_name]]:
-        verts = [vert.co for vert in obj.data.vertices]
-        coords_2d = [world_to_camera_view(scene, camObj, coord) for coord in verts]
-        
-        vertlist = [vert.co for vert in obj.data.vertices] 
-        bpy.context.scene.camera = bpy.data.objects['Camera']
+        coords_2d = [project_by_object_utils(camObj, coord) for coord in verts]
         eye_location = camObj.location 
-        visible_vertices = []
-        #print(len(verts))
         # Find visible points in current camera
+        vert_indices = []
+        for polygon in obj.data.polygons:
+            vert_index = [p for p in polygon.vertices]
+            vert_indices.append(vert_index)
         for i, vert in enumerate(verts):
             vis = True
-            for idx, polygon in enumerate(obj.data.polygons):
-                vert_indices = [p for p in polygon.vertices]
-                if i in vert_indices:
+            for vert_index in vert_indices:
+                if i in vert_index:
                     continue
-                v1 = Vector(vertlist[vert_indices[0]])
-                v2 = Vector(vertlist[vert_indices[1]])
-                v3 = Vector(vertlist[vert_indices[2]])
+                v1 = Vector(verts[vert_index[0]])
+                v2 = Vector(verts[vert_index[1]])
+                v3 = Vector(verts[vert_index[2]])
                 ray = Vector(eye_location-vert)
                 orig = Vector(vert)
                 
@@ -171,18 +191,28 @@ for param in view_params:
                     vis = False
                     break
             
-            if vis:
-                visible_vertices.append(i)   
+            vert_str = "{:.40f},{:.40f},{:.40f}".format(vert[0],vert[1], vert[2])
+            if vis:    
+                vert_visibility_dict[vert_str] = (True, coords_2d[i])
+            else:
+                vert_visibility_dict[vert_str] = (False, coords_2d[i])
+        
         # 2d data printout:
         rnd = lambda i: round(i)
-        coords_2d = [coords_2d[index] for index in visible_vertices]
-        print(len(coords_2d))
-        for index in visible_vertices:
-            print("{},{},{}".format(verts[index][0],verts[index][1], verts[index][2]))
-        for x, y, distance_to_lens in coords_2d:
-            key_px = "{},{}".format(rnd(res_x*x), rnd(res_y*y))
-            print("{},{}".format(rnd(res_x*x), rnd(res_y*y)))
-
+        syn_label_file = '%s_%s_a%03d_e%03d_t%03d_d%03d.label' % (shape_synset, shape_md5, round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
+        render_scale = bpy.context.scene.render.resolution_percentage / 100
+        render_size = (
+            int(bpy.context.scene.render.resolution_x * render_scale),
+            int(bpy.context.scene.render.resolution_y * render_scale),
+            )
+        with open(os.path.join(syn_images_folder, syn_label_file), 'w') as f:
+             for i, vert in enumerate(vert_visibility_dict.items()):
+                x, y = vert[1][1]
+                if vert[1][0] and (0 <= x < render_size[0]) and (0 <= y < render_size[1]):
+                    key_px = "{} {} {}".format(i, rnd(x), rnd(y))
+                else:
+                    key_px = "{} {} {}".format(i, -1, -1)
+                f.write("%s\n"%key_px)
     syn_image_file = './%s_%s_a%03d_e%03d_t%03d_d%03d.png' % (shape_synset, shape_md5, round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
     bpy.data.scenes['Scene'].render.filepath = os.path.join(syn_images_folder, syn_image_file)
     bpy.ops.render.render( write_still=True )
