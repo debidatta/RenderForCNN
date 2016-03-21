@@ -41,10 +41,10 @@ light_num_highbound = g_syn_light_num_highbound
 light_dist_lowbound = g_syn_light_dist_lowbound
 light_dist_highbound = g_syn_light_dist_highbound
 
-render_scale = bpy.scene.render.resolution_percentage / 100
+render_scale = bpy.context.scene.render.resolution_percentage / 100
 render_size = (
-            int(bpy.scene.render.resolution_x * render_scale),
-            int(bpy.scene.render.resolution_y * render_scale),
+            int(bpy.context.scene.render.resolution_x * render_scale),
+            int(bpy.context.scene.render.resolution_y * render_scale),
             )
 
 def project_by_object_utils(cam, point):
@@ -175,6 +175,7 @@ for param in view_params:
         for polygon in obj.data.polygons:
             vert_index = [p for p in polygon.vertices]
             vert_indices.append(vert_index)
+        #random.shuffle(vert_indices)
         for i, vert in enumerate(verts):
             vis = True
             for vert_index in vert_indices:
