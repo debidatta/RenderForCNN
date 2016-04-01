@@ -55,7 +55,8 @@ def project_by_object_utils(cam, point):
 # Input parameters
 #'%s %s --background --python %s -- %s %s %s %s %s %s' % (g_blender_executable_path, blank_file, render_code, args.model_file, 'xxx', 'xxx', view_file, temp_dirname, args.scale)
 shape_file = sys.argv[-6]
-shape_synset = sys.argv[-5]
+keypoint_file = sys.argv[-5]
+#shape_synset = sys.argv[-5]
 shape_md5 = sys.argv[-4]
 shape_view_params_file = sys.argv[-3]
 syn_images_folder = sys.argv[-2]
@@ -64,7 +65,7 @@ scale = float(sys.argv[-1])
 if not os.path.exists(syn_images_folder):
     os.mkdir(syn_images_folder)
 #syn_images_folder = os.path.join(g_syn_images_folder, shape_synset, shape_md5) 
-view_params = [[float(x) for x in line.strip().split(' ')] for line in open(shape_view_params_file).readlines()]
+view_params = [[float(x) if i < 4 else x for i,x in enumerate(line.strip().split(' '))] for line in open(shape_view_params_file).readlines()]
 
 if not os.path.exists(syn_images_folder):
     os.makedirs(syn_images_folder)
@@ -119,7 +120,6 @@ for vert in verts:
     vert_str = "{:.40f},{:.40f},{:.40f}".format(vert[0],vert[1], vert[2]) 
     vert_visibility_dict[vert_str] = (False, None)
 vert_visibility_dict = OrderedDict(sorted(vert_visibility_dict.items(), key=lambda x: x[0]))
-
 # set lights
 bpy.ops.object.select_all(action='TOGGLE')
 if 'Lamp' in list(bpy.data.objects.keys()):
@@ -127,13 +127,16 @@ if 'Lamp' in list(bpy.data.objects.keys()):
 bpy.ops.object.delete()
 
 # YOUR CODE START HERE
+with open(keypoint_file) as f:
+    kp_list =  [int(x.strip()) for x in f.readlines()]
 
 for param in view_params:
     azimuth_deg = param[0]
     elevation_deg = param[1]
     theta_deg = -1 * param[2] # ** multiply by -1 to match pascal3d annotations **
     rho = param[3]
-
+    img_file = param[4]
+    lbl_file = param[5]
     # clear default lights
     bpy.ops.object.select_by_type(type='LAMP')
     bpy.ops.object.delete(use_global=False)
@@ -165,7 +168,7 @@ for param in view_params:
     camObj.rotation_quaternion[2] = q[2]
     camObj.rotation_quaternion[3] = q[3]
     bpy.context.scene.update()
-    
+    vert_list_from_dict = list(vert_visibility_dict.keys())
     # use generator expressions () or list comprehensions []
     for obj in [bpy.data.objects[mesh_name]]:
         coords_2d = [project_by_object_utils(camObj, coord) for coord in verts]
@@ -177,6 +180,9 @@ for param in view_params:
             vert_indices.append(vert_index)
         random.shuffle(vert_indices)
         for i, vert in enumerate(verts):
+            vert_str = "{:.40f},{:.40f},{:.40f}".format(vert[0],vert[1], vert[2])
+            if vert_list_from_dict.index(vert_str) not in kp_list:
+                continue
             vis = True
             for vert_index in vert_indices:
                 if i in vert_index:
@@ -192,7 +198,6 @@ for param in view_params:
                     vis = False
                     break
             
-            vert_str = "{:.40f},{:.40f},{:.40f}".format(vert[0],vert[1], vert[2])
             if vis:    
                 vert_visibility_dict[vert_str] = (True, coords_2d[i])
             else:
@@ -200,21 +205,25 @@ for param in view_params:
         
         # 2d data printout:
         rnd = lambda i: round(i)
-        syn_label_file = '%s_%s_a%03d_e%03d_t%03d_d%03d.label' % (shape_synset, shape_md5, round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
+        #syn_label_file = 'syn_a%03d_e%03d_t%03d_d%03d.txt' % (round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
         render_scale = bpy.context.scene.render.resolution_percentage / 100
         render_size = (
             int(bpy.context.scene.render.resolution_x * render_scale),
             int(bpy.context.scene.render.resolution_y * render_scale),
             )
-        with open(os.path.join(syn_images_folder, syn_label_file), 'w') as f:
+        with open(lbl_file, 'w') as f:
              for i, vert in enumerate(vert_visibility_dict.items()):
-                x, y = vert[1][1]
-                if vert[1][0] and (0 <= x < render_size[0]) and (0 <= y < render_size[1]):
-                    key_px = "{} {} {}".format(i, rnd(x), rnd(y))
-                else:
+                if vert[1][1] == None:
                     key_px = "{} {} {}".format(i, -1, -1)
+                else:
+                    x, y = vert[1][1]
+        #        key_px = "{} {} {}".format(i, rnd(x), rnd(y))
+                    if vert[1][0] and (0 <= x < render_size[0]) and (0 <= y < render_size[1]):
+                        key_px = "{} {} {}".format(i, rnd(x), rnd(y))
+                    else:
+                        key_px = "{} {} {}".format(i, -1, -1)
                 f.write("%s\n"%key_px)
-    syn_image_file = './%s_%s_a%03d_e%03d_t%03d_d%03d.png' % (shape_synset, shape_md5, round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
-    bpy.data.scenes['Scene'].render.filepath = os.path.join(syn_images_folder, syn_image_file)
+    #syn_image_file = 'syn_a%03d_e%03d_t%03d_d%03d.png' % (round(azimuth_deg), round(elevation_deg), round(theta_deg), round(rho))
+    bpy.data.scenes['Scene'].render.filepath = os.path.join(img_file)
     bpy.ops.render.render( write_still=True )
 
